@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>SENTINEL AI · Live Feed</title>
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .feed-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Main canvas area ── */
+    .canvas-zone {
+      position: relative;
+      flex: 1;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Hidden video source */
+    #video {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Visible canvas with HUD drawn on top of video */
+    #canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Offline placeholder */
+    .no-signal {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      color: var(--amber-dim);
+      z-index: 10;
+    }
+
+    .no-signal.hidden { display: none; }
+
+    .no-signal .radar {
+      width: 80px;
+      height: 80px;
+      border: 2px solid rgba(255, 183, 0, 0.2);
+      border-radius: 50%;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .no-signal .radar::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 2px;
+      height: 38px;
+      background: var(--amber-dim);
+      transform-origin: bottom center;
+      transform: translateX(-50%);
+      animation: radar-sweep 3s linear infinite;
+    }
+
+    @keyframes radar-sweep {
+      from { transform: translateX(-50%) rotate(0deg); }
+      to   { transform: translateX(-50%) rotate(360deg); }
+    }
+
+    .no-signal .radar-inner {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--amber-dim);
+    }
+
+    .no-signal p {
+      font-family: var(--font-display);
+      font-size: 0.65rem;
+      letter-spacing: 0.25em;
+    }
+
+    /* ── Stats strip ── */
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Controls strip ── */
+    .controls-strip {
+      display: flex;
+      gap: 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .controls-strip .btn {
+      flex: 1;
+      border-radius: 0;
+      border: none;
+      border-right: 1px solid var(--border);
+      padding: 11px 6px;
+    }
+
+    .controls-strip .btn:last-child { border-right: none; }
+
+    /* Snapshot feedback flash */
+    .snap-flash {
+      position: absolute;
+      inset: 0;
+      background: #fff;
+      z-index: 20;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.05s;
+    }
+    .snap-flash.go { opacity: 0.6; }
+
+    /* Connection status */
+    .conn-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .conn-left { display: flex; align-items: center; gap: 8px; }
+    .conn-text { font-size: 0.52rem; color: var(--text-dim); letter-spacing: 0.12em; }
+    .conn-right { font-size: 0.52rem; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+
+<!-- Alert banner -->
+<div class="alert-banner" id="alertBanner">⚠ ALERT MODE ACTIVE — UNAUTHORIZED PRESENCE DETECTED</div>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-logo">SENTINEL <span class="accent">AI</span><span class="sub">FEED · NODE v1.0</span></div>
+  <div class="nav-center hide-mobile">
+    <div class="status-pill">
+      <div class="status-dot" id="camDot"></div>
+      <span id="camStatus">OFFLINE</span>
+    </div>
+  </div>
+  <div class="nav-right">
+    <span class="nav-time" id="navTime">00:00:00</span>
+    <a href="/dashboard" class="nav-link">DASHBOARD →</a>
+  </div>
+</nav>
+
+<div class="feed-wrapper">
+
+  <!-- Connection bar -->
+  <div class="conn-bar">
+    <div class="conn-left">
+      <div class="status-dot" id="sockDot"></div>
+      <span class="conn-text" id="sockStatus">CONNECTING TO SERVER…</span>
+    </div>
+    <span class="conn-right" id="detectorLabel">DETECTOR: —</span>
+  </div>
+
+  <!-- Main canvas zone -->
+  <div class="canvas-zone bracketed">
+
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="canvas"></canvas>
+
+    <!-- Offline placeholder -->
+    <div class="no-signal" id="noSignal">
+      <div class="radar"><div class="radar-inner"></div></div>
+      <p>NO SIGNAL</p>
+      <p style="font-size:0.55rem; color:var(--text-faint); margin-top:-8px">PRESS START TO INITIALIZE</p>
+    </div>
+
+    <!-- Snapshot flash -->
+    <div class="snap-flash" id="snapFlash"></div>
+
+  </div>
+
+  <!-- Stats strip -->
+  <div class="stats-strip">
+    <div class="metric-card">
+      <div class="metric-label">STATUS</div>
+      <div class="metric-value" id="sStatus" style="font-size:0.85rem; color:var(--text-dim)">OFFLINE</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">LIVE FPS</div>
+      <div class="metric-value" id="sFps">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">TARGETS</div>
+      <div class="metric-value" id="sTargets">0</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">TOTAL DET.</div>
+      <div class="metric-value" id="sTotal">0</div>
+    </div>
+  </div>
+
+  <!-- Controls strip -->
+  <div class="controls-strip">
+    <button class="btn btn-green"  id="btnStart" onclick="startCamera()">▶ START</button>
+    <button class="btn btn-red"    id="btnStop"  onclick="stopCamera()">■ STOP</button>
+    <button class="btn btn-amber"  onclick="takeSnapshot()">⊙ SNAP</button>
+    <button class="btn btn-cyan"   id="btnAlert" onclick="toggleAlert()">⚠ ALERT</button>
+  </div>
+
+  <!-- Ticker -->
+  <div class="ticker">
+    <span class="ticker-inner">
+      SENTINEL AI SURVEILLANCE SYSTEM · HUMAN DETECTION ACTIVE · TF.JS COCO-SSD · GPS LOGGING ENABLED · OFFLINE OPERATION CAPABLE · NODE.JS + SOCKET.IO · AXEROAI ·
+    </span>
+  </div>
+
+</div>
+
+<!-- Scripts: TF.js + COCO-SSD from CDN (cached after first load) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<!-- Socket.io client (served by our own server) -->
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/detection.js"></script>
+
+<script>
+  'use strict';
+
+  // ── State ──────────────────────────────────────────────────
+  let engine      = null;
+  let alertActive = false;
+  let totalDets   = 0;
+  window._sentinelAlert = false;
+
+  // ── Socket.io connection ───────────────────────────────────
+  const socket = io({ reconnectionAttempts: 20, timeout: 10000 });
+
+  socket.on('connect', () => {
+    socket.emit('join_room', 'feed');
+    setEl('sockStatus', 'CONNECTED · SERVER READY');
+    document.getElementById('sockDot').classList.add('active');
+  });
+
+  socket.on('disconnect', () => {
+    setEl('sockStatus', 'DISCONNECTED — RECONNECTING…');
+    document.getElementById('sockDot').classList.remove('active');
+  });
+
+  socket.on('alert_state', ({ active }) => {
+    alertActive = active;
+    window._sentinelAlert = active;
+    document.getElementById('alertBanner').classList.toggle('show', active);
+    document.getElementById('btnAlert').classList.toggle('btn--active-alert', active);
+  });
+
+  socket.on('detection_count', (count) => {
+    totalDets = count;
+    setEl('sTotal', count);
+  });
+
+  // ── Clock ──────────────────────────────────────────────────
+  function tick() {
+    const t = new Date();
+    setEl('navTime', t.toTimeString().slice(0, 8));
+  }
+  setInterval(tick, 1000); tick();
+
+  // ── Helpers ────────────────────────────────────────────────
+  function setEl(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  // ── Start camera ───────────────────────────────────────────
+  async function startCamera() {
+    if (engine && engine.running) return;
+
+    engine = new SentinelEngine({
+      videoEl:  document.getElementById('video'),
+      canvasEl: document.getElementById('canvas'),
+
+      onDetection: (payload) => {
+        // Emit to server for logging
+        socket.emit('detection_event', payload);
+        // Update local target count
+        setEl('sTargets', payload.detections.length);
+        totalDets += payload.detections.length;
+        setEl('sTotal', totalDets);
+      },
+
+      onFrame: (frameData) => {
+        socket.emit('frame', frameData);
+        setEl('sFps', frameData.fps.toFixed(1));
+      },
+
+      onStatus: (status) => {
+        setEl('sStatus', status);
+        setEl('camStatus', status);
+        setEl('detectorLabel', `DETECTOR: ${engine ? engine.detectorType : '—'}`);
+        document.getElementById('camDot').classList.toggle('active', engine && engine.running);
+        document.getElementById('noSignal').classList.toggle('hidden', engine && engine.running);
+      },
+
+      onLog: (level, msg) => {
+        // Could display on-screen; currently console only
+      },
+    });
+
+    try {
+      await engine.start();
+      socket.emit('camera_started');
+      setEl('sStatus', 'LIVE');
+      document.getElementById('camDot').classList.add('active');
+      document.getElementById('noSignal').classList.add('hidden');
+      document.getElementById('sStatus').style.color = 'var(--green)';
+    } catch (err) {
+      setEl('sStatus', 'ERROR');
+      alert('Camera error: ' + err.message + '\n\nEnsure you are accessing via HTTPS or localhost.');
+    }
+  }
+
+  // ── Stop camera ────────────────────────────────────────────
+  function stopCamera() {
+    if (engine) {
+      engine.stop();
+      engine = null;
+    }
+    socket.emit('camera_stopped');
+    setEl('sStatus', 'OFFLINE');
+    setEl('sFps', '—');
+    setEl('sTargets', '0');
+    document.getElementById('sStatus').style.color = 'var(--text-dim)';
+    document.getElementById('camDot').classList.remove('active');
+    document.getElementById('noSignal').classList.remove('hidden');
+  }
+
+  // ── Snapshot ────────────────────────────────────────────────
+  async function takeSnapshot() {
+    const canvas = document.getElementById('canvas');
+    if (!canvas.width) { alert('No frame — start camera first.'); return; }
+
+    // Camera flash effect
+    const flash = document.getElementById('snapFlash');
+    flash.classList.add('go');
+    setTimeout(() => flash.classList.remove('go'), 120);
+
+    const imageData = canvas.toDataURL('image/jpeg', 0.88);
+    const metadata  = {
+      lat:  engine ? engine.gps.lat : null,
+      lon:  engine ? engine.gps.lon : null,
+      temp: engine ? engine.temperature : null,
+      fps:  engine ? engine.fps : 0,
+    };
+
+    try {
+      const res = await fetch('/api/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData, metadata }),
+      });
+      const d = await res.json();
+      if (d.status === 'saved') {
+        // Brief toast (console)
+        console.log('[SENTINEL] Snapshot saved:', d.filename);
+      }
+    } catch (err) {
+      console.error('Snapshot failed:', err);
+    }
+  }
+
+  // ── Alert toggle ───────────────────────────────────────────
+  async function toggleAlert() {
+    alertActive = !alertActive;
+    window._sentinelAlert = alertActive;
+    await fetch('/api/alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: alertActive }),
+    });
+  }
+
+  // ── Auto-start if previously active ───────────────────────
+  fetch('/api/status').then(r => r.json()).then(d => {
+    if (d.cameraActive) startCamera();
+  }).catch(() => {});
+</script>
+</body>
+</html>

@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>SENTINEL AI · Command Dashboard</title>
+  <link rel="stylesheet" href="/css/sentinel.css">
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ═══ MAIN LAYOUT ═════════════════════════════ */
+    .layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ── Left col ── */
+    .col-main {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ── Right col ── */
+    .col-side {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ═══ FEED VIEWER ════════════════════════════ */
+    .feed-view {
+      position: relative;
+      background: #000;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #dashFeed {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .feed-offline-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--amber-dim);
+    }
+
+    .feed-offline-overlay.hidden { display: none; }
+
+    .feed-offline-overlay .big-icon {
+      font-family: var(--font-display);
+      font-size: 0.72rem;
+      letter-spacing: 0.25em;
+    }
+
+    /* Radar ring decoration */
+    .radar-ring {
+      width: 70px; height: 70px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 183, 0, 0.18);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .radar-ring::before {
+      content: '';
+      position: absolute;
+      width: 45px; height: 45px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 183, 0, 0.1);
+    }
+    .radar-ring::after {
+      content: '';
+      position: absolute;
+      width: 2px; height: 32px;
+      background: rgba(255, 183, 0, 0.3);
+      top: 50%; left: 50%;
+      transform-origin: top center;
+      animation: sweep 3s linear infinite;
+    }
+    @keyframes sweep {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .radar-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--amber-dim); }
+
+    /* ═══ METRICS ROW ════════════════════════════ */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* ═══ CONTROLS PANEL ═════════════════════════ */
+    .controls-panel {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .ctrl-label {
+      font-family: var(--font-display);
+      font-size: 0.52rem;
+      letter-spacing: 0.2em;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+    }
+
+    .ctrl-row {
+      display: flex;
+      gap: 7px;
+    }
+
+    .ctrl-row .btn {
+      flex: 1;
+      font-size: 0.58rem;
+    }
+
+    /* ═══ SYS LOG ════════════════════════════════ */
+    .sys-log-panel {
+      flex-shrink: 0;
+      max-height: 80px;
+      overflow-y: auto;
+      padding: 7px 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ═══ GPS PANEL ══════════════════════════════ */
+    .gps-panel {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .gps-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 9px;
+    }
+
+    .gps-item { display: flex; flex-direction: column; gap: 2px; }
+    .gps-label { font-size: 0.48rem; letter-spacing: 0.2em; color: var(--text-dim); }
+    .gps-value { font-size: 0.75rem; color: var(--cyan); font-family: var(--font-mono); }
+
+    /* ═══ DETECTION LOG ══════════════════════════ */
+    .log-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .log-scroll {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    /* ═══ SNAPSHOTS ══════════════════════════════ */
+    .snap-panel {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .snap-label {
+      font-size: 0.5rem;
+      color: var(--text-dim);
+      letter-spacing: 0.18em;
+      margin-bottom: 8px;
+    }
+
+    .snap-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* ═══ MOBILE ══════════════════════════════════ */
+    @media (max-width: 640px) {
+      .layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+        overflow-y: auto;
+      }
+      .col-main {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        min-height: 0;
+      }
+      .feed-view { min-height: 240px; }
+      .col-side { max-height: none; }
+      .metrics-row { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Alert banner -->
+<div class="alert-banner" id="alertBanner">⚠ ALERT MODE ACTIVE — ALL UNITS NOTIFIED</div>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-logo">SENTINEL <span class="accent">AI</span><span class="sub">COMMAND · NODE v1.0</span></div>
+  <div class="nav-center hide-mobile">
+    <div class="status-pill">
+      <div class="status-dot" id="camDot"></div>
+      <span id="camStatus">OFFLINE</span>
+    </div>
+    <div class="status-pill">
+      <div class="status-dot" id="sockDot"></div>
+      <span id="sockStatus">CONNECTING</span>
+    </div>
+  </div>
+  <div class="nav-right">
+    <span class="nav-time" id="navTime">00:00:00</span>
+    <a href="/" class="nav-link">📡 FEED</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- ════ LEFT COLUMN ════ -->
+  <div class="col-main">
+
+    <!-- Feed viewer -->
+    <div class="section-head">
+      <span class="section-title">📷 LIVE RELAY</span>
+      <span class="section-meta" id="feedMeta">AWAITING STREAM…</span>
+    </div>
+    <div class="feed-view bracketed">
+      <img id="dashFeed" src="" alt="Live relay" style="display:none;">
+      <div class="feed-offline-overlay" id="feedOffline">
+        <div class="radar-ring"><div class="radar-dot"></div></div>
+        <div class="big-icon">NO SIGNAL</div>
+        <div style="font-size:0.52rem; color:var(--text-faint); letter-spacing:0.15em">
+          Start camera from the FEED page
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-label">CAMERA</div>
+        <div class="metric-value" id="mCam" style="font-size:0.82rem; color:var(--text-dim)">OFFLINE</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">FPS</div>
+        <div class="metric-value" id="mFps">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">DETECTIONS</div>
+        <div class="metric-value" id="mTotal">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">CLIENTS</div>
+        <div class="metric-value" id="mClients">—</div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-panel">
+      <div class="ctrl-label">⚙ OPERATOR CONTROLS</div>
+      <div class="ctrl-row">
+        <button class="btn btn-amber"  onclick="goToFeed()">📡 OPEN FEED</button>
+        <button class="btn btn-cyan"   onclick="takeSnapshot()">⊙ SNAPSHOT</button>
+        <button class="btn btn-red"    onclick="clearLog()">✕ CLEAR LOG</button>
+      </div>
+      <div class="ctrl-row">
+        <button class="btn" id="alertBtn" onclick="toggleAlert()">⚠ TOGGLE ALERT</button>
+        <button class="btn btn-cyan"   onclick="refreshStatus()">↺ REFRESH</button>
+      </div>
+    </div>
+
+    <!-- System log -->
+    <div class="sys-log-panel" id="sysLogPanel"></div>
+
+  </div><!-- /col-main -->
+
+  <!-- ════ RIGHT COLUMN ════ -->
+  <div class="col-side">
+
+    <!-- GPS panel -->
+    <div class="section-head">
+      <span class="section-title">📍 LOCATION</span>
+      <span class="section-meta" id="gpsMeta">LIVE</span>
+    </div>
+    <div class="gps-panel">
+      <div class="gps-grid">
+        <div class="gps-item"><div class="gps-label">LATITUDE</div><div class="gps-value" id="gLat">—</div></div>
+        <div class="gps-item"><div class="gps-label">LONGITUDE</div><div class="gps-value" id="gLon">—</div></div>
+        <div class="gps-item"><div class="gps-label">DETECTOR</div><div class="gps-value" id="gDet" style="color:var(--amber); font-size:0.62rem">—</div></div>
+        <div class="gps-item"><div class="gps-label">ALERT</div><div class="gps-value" id="gAlert" style="color:var(--red)">OFF</div></div>
+        <div class="gps-item"><div class="gps-label">TEMP (SIM)</div><div class="gps-value" id="gTemp">—</div></div>
+        <div class="gps-item"><div class="gps-label">UPTIME</div><div class="gps-value" id="gUptime">—</div></div>
+      </div>
+    </div>
+
+    <!-- Detection log -->
+    <div class="section-head">
+      <span class="section-title">🎯 DETECTION LOG</span>
+      <span class="section-meta" id="logMeta">0 RECORDS</span>
+    </div>
+
+    <div class="log-panel">
+      <div class="log-table-header">
+        <span>#</span><span>TARGET</span><span style="text-align:right">CONF</span><span style="text-align:right">TIME</span>
+      </div>
+      <div class="log-scroll" id="logScroll">
+        <div class="log-empty">— AWAITING DETECTIONS —</div>
+      </div>
+    </div>
+
+    <!-- Snapshots -->
+    <div class="snap-panel">
+      <div class="snap-label">RECENT SNAPSHOTS</div>
+      <div class="snap-row" id="snapRow">
+        <span style="font-size:0.55rem; color:var(--text-faint)">No snapshots yet.</span>
+      </div>
+    </div>
+
+  </div><!-- /col-side -->
+
+</div><!-- /layout -->
+
+<!-- Socket.io -->
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  'use strict';
+
+  // ── State ──────────────────────────────────────────────────
+  let alertActive  = false;
+  let detLogCache  = [];
+  let snapCache    = [];
+  let frameTimer   = null;
+
+  // ── Socket ────────────────────────────────────────────────
+  const socket = io({ reconnectionAttempts: 20 });
+
+  socket.on('connect', () => {
+    setStatus('sockDot', 'active');
+    setEl('sockStatus', 'ONLINE');
+    socket.emit('join_room', 'dashboard');
+    socket.emit('request_state');
+    addSysLog('ok', 'Connected to SENTINEL server.');
+  });
+
+  socket.on('disconnect', () => {
+    setStatus('sockDot', '');
+    setEl('sockStatus', 'OFFLINE');
+    addSysLog('warn', 'Disconnected from server.');
+  });
+
+  // ── Incoming: full server state on join ───────────────────
+  socket.on('server_state', (state) => {
+    setCamState(state.cameraActive);
+    setAlertState(state.alertActive);
+    setEl('mTotal',   state.totalDetections);
+    setEl('gDet',     state.detectorType || '—');
+    setEl('mFps',     state.fps ? state.fps.toFixed(1) : '—');
+
+    // Populate detection log
+    detLogCache = state.detectionLog || [];
+    renderLog();
+
+    // Populate snapshots
+    snapCache = state.snapshotLog || [];
+    renderSnaps();
+
+    // Sys log
+    (state.systemLog || []).reverse().forEach(e => addSysLog(e.level, e.msg));
+  });
+
+  // ── Incoming: live frame relay from feed page ─────────────
+  socket.on('frame', (data) => {
+    const img = document.getElementById('dashFeed');
+    img.src = data.imageData;
+    img.style.display = 'block';
+    document.getElementById('feedOffline').classList.add('hidden');
+    setEl('feedMeta', `${data.fps ? data.fps.toFixed(1) : '—'} FPS · RELAY`);
+    setEl('mFps', data.fps ? data.fps.toFixed(1) : '—');
+
+    // If no frame for 3s → show offline
+    clearTimeout(frameTimer);
+    frameTimer = setTimeout(() => {
+      document.getElementById('dashFeed').style.display = 'none';
+      document.getElementById('feedOffline').classList.remove('hidden');
+      setEl('feedMeta', 'STREAM TIMEOUT');
+    }, 4000);
+  });
+
+  // ── Incoming: camera state change ─────────────────────────
+  socket.on('camera_state', ({ active }) => {
+    setCamState(active);
+    if (!active) {
+      document.getElementById('dashFeed').style.display = 'none';
+      document.getElementById('feedOffline').classList.remove('hidden');
+      setEl('feedMeta', 'CAMERA OFFLINE');
+    }
+  });
+
+  // ── Incoming: new detection record ────────────────────────
+  socket.on('new_detection', (record) => {
+    detLogCache.unshift(record);
+    if (detLogCache.length > 100) detLogCache.pop();
+    renderLog();
+    setEl('mTotal', record.id);
+    setEl('logMeta', detLogCache.length + ' RECORDS');
+    addSysLog('alert', `Target detected: ${record.label} (${record.confidence}% conf)`);
+  });
+
+  // ── Incoming: snapshot saved ───────────────────────────────
+  socket.on('snapshot_saved', (entry) => {
+    snapCache.unshift(entry);
+    if (snapCache.length > 10) snapCache.pop();
+    renderSnaps();
+    addSysLog('ok', `Snapshot saved: ${entry.filename}`);
+  });
+
+  // ── Incoming: alert state change ──────────────────────────
+  socket.on('alert_state', ({ active }) => {
+    setAlertState(active);
+  });
+
+  // ── Incoming: detection log cleared ───────────────────────
+  socket.on('detections_cleared', () => {
+    detLogCache = [];
+    renderLog();
+    setEl('mTotal', '0');
+    setEl('logMeta', '0 RECORDS');
+    addSysLog('warn', 'Detection log cleared.');
+  });
+
+  // ── Incoming: client count ─────────────────────────────────
+  socket.on('client_count', (count) => {
+    setEl('mClients', count);
+  });
+
+  // ── Incoming: GPS update ───────────────────────────────────
+  socket.on('gps_update', (coords) => {
+    setEl('gLat',  coords.lat ? coords.lat.toFixed(5) : '—');
+    setEl('gLon',  coords.lon ? coords.lon.toFixed(5) : '—');
+  });
+
+  // ── Incoming: detector type ────────────────────────────────
+  socket.on('detector_type', (type) => {
+    setEl('gDet', type);
+  });
+
+  // ── Incoming: sys log ──────────────────────────────────────
+  socket.on('sys_log', (entry) => {
+    addSysLog(entry.level, entry.msg);
+  });
+
+  // ─────────────────────────────────────────────────────────
+  //  UI HELPERS
+  // ─────────────────────────────────────────────────────────
+  function setEl(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  function setStatus(dotId, cls) {
+    const d = document.getElementById(dotId);
+    if (!d) return;
+    d.className = 'status-dot';
+    if (cls) d.classList.add(cls);
+  }
+
+  function setCamState(active) {
+    setStatus('camDot', active ? 'active' : '');
+    setEl('camStatus', active ? 'LIVE' : 'OFFLINE');
+    const mCam = document.getElementById('mCam');
+    if (mCam) {
+      mCam.textContent = active ? 'LIVE' : 'OFFLINE';
+      mCam.style.color = active ? 'var(--green)' : 'var(--text-dim)';
+    }
+  }
+
+  function setAlertState(active) {
+    alertActive = active;
+    document.getElementById('alertBanner').classList.toggle('show', active);
+    const btn = document.getElementById('alertBtn');
+    if (btn) {
+      btn.textContent = active ? '⚠ ALERT: ON' : '⚠ TOGGLE ALERT';
+      btn.className = active ? 'btn btn--active-alert' : 'btn btn-amber';
+    }
+    setEl('gAlert', active ? 'ACTIVE' : 'OFF');
+    setStatus('camDot', active ? 'alert' : (document.getElementById('camStatus').textContent === 'LIVE' ? 'active' : ''));
+  }
+
+  // ── Render detection log ───────────────────────────────────
+  function renderLog() {
+    const scroll = document.getElementById('logScroll');
+    setEl('logMeta', detLogCache.length + ' RECORDS');
+
+    if (!detLogCache.length) {
+      scroll.innerHTML = '<div class="log-empty">— NO DETECTIONS YET —</div>';
+      return;
+    }
+
+    scroll.innerHTML = detLogCache.slice(0, 80).map(r => {
+      const t = r.timestamp ? r.timestamp.slice(11, 19) : '--:--:--';
+      const confColor = r.confidence >= 80 ? '#ff6666' : r.confidence >= 60 ? '#ffcc44' : '#88cc88';
+      return `<div class="log-entry">
+        <span class="log-id">#${String(r.id).padStart(3,'0')}</span>
+        <span class="log-label">● ${r.label}</span>
+        <span class="log-conf" style="color:${confColor}">${r.confidence}%</span>
+        <span class="log-time">${t}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Render snapshot thumbnails ─────────────────────────────
+  function renderSnaps() {
+    const row = document.getElementById('snapRow');
+    if (!snapCache.length) {
+      row.innerHTML = '<span style="font-size:0.55rem; color:var(--text-faint)">No snapshots yet.</span>';
+      return;
+    }
+    row.innerHTML = snapCache.slice(0, 6).map(s =>
+      `<img class="snap-thumb" src="${s.url}" title="${s.filename}"
+           onclick="window.open('${s.url}','_blank')"
+           onerror="this.style.display='none'">`
+    ).join('');
+  }
+
+  // ── Add system log line ────────────────────────────────────
+  function addSysLog(level, msg) {
+    const panel = document.getElementById('sysLogPanel');
+    const t = new Date().toLocaleTimeString('en-GB');
+    const div = document.createElement('div');
+    div.className = `sys-log-line ${level}`;
+    div.textContent = `[${t}] ${msg}`;
+    panel.insertBefore(div, panel.firstChild);
+    while (panel.children.length > 25) panel.removeChild(panel.lastChild);
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  CONTROLS
+  // ─────────────────────────────────────────────────────────
+  function goToFeed() {
+    window.open('/', '_blank');
+  }
+
+  async function takeSnapshot() {
+    // Dashboard snapshot = latest frame stored server-side
+    addSysLog('info', 'Requesting snapshot from feed…');
+    // Feed page sends snapshot; here we just open feed page
+    window.open('/', '_blank');
+  }
+
+  async function clearLog() {
+    if (!confirm('Clear all detection records?')) return;
+    await fetch('/api/detections/clear', { method: 'POST' });
+  }
+
+  async function toggleAlert() {
+    alertActive = !alertActive;
+    await fetch('/api/alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: alertActive }),
+    });
+  }
+
+  async function refreshStatus() {
+    try {
+      const res  = await fetch('/api/status');
+      const data = await res.json();
+      setEl('mFps',    data.fps.toFixed(1));
+      setEl('mTotal',  data.totalDetections);
+      setEl('mClients', data.connectedClients);
+      setEl('gDet',    data.detectorType);
+      setEl('gUptime', data.uptime + 's');
+      addSysLog('ok', 'Status refreshed.');
+    } catch(e) {
+      addSysLog('error', 'Refresh failed: ' + e.message);
+    }
+  }
+
+  // ── Clock ──────────────────────────────────────────────────
+  function tick() {
+    const t = new Date();
+    setEl('navTime', t.toTimeString().slice(0, 8));
+  }
+  setInterval(tick, 1000); tick();
+
+  // ── Periodic uptime ───────────────────────────────────────
+  setInterval(async () => {
+    try {
+      const res = await fetch('/api/status');
+      const d   = await res.json();
+      setEl('gUptime', d.uptime + 's');
+      setEl('mClients', d.connectedClients);
+    } catch(e) {}
+  }, 8000);
+
+  // ── Init ──────────────────────────────────────────────────
+  refreshStatus();
+</script>
+</body>
+</html>
